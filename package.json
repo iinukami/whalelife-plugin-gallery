@@ -24,7 +24,7 @@
     "prettier": "3.6.2",
     "typescript": "5.9.3"
   },
-  "license": "UNLICENSED",
+  "license": "AGPL-3.0-only",
   "repository": {
     "type": "git",
     "url": "https://github.com/iinukami/whalelife-plugin-gallery.git"

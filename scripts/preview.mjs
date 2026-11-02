@@ -1,3 +1,7 @@
+/*! Copyright (c) 2026 iinukami and contributors.
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * Additional terms under AGPLv3 Section 7: see LICENSE-ADDITIONAL.
+ */
 import { mkdir, mkdtemp, cp, writeFile, rm } from "node:fs/promises";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";

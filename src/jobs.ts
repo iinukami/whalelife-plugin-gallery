@@ -1,3 +1,7 @@
+/*! Copyright (c) 2026 iinukami and contributors.
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * Additional terms under AGPLv3 Section 7: see LICENSE-ADDITIONAL.
+ */
 import { randomUUID } from "node:crypto";
 import { Store } from "./store.ts";
 import { errorResult, type Job, type JobItem } from "./types.ts";
