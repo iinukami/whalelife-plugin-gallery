@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>图库 · WhaleLife</title>
+    <link rel="stylesheet" href="/plugins/gallery/style.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <p class="eyebrow">WHALELIFE · GALLERY</p>
+          <h1>留住想用的那张图</h1>
+          <p class="sub">一套共享图库，保存表情、照片、截图和灵感。</p>
+        </div>
+        <button id="refresh" class="quiet">刷新</button>
+      </header>
+      <div id="notice" role="status" aria-live="polite"></div>
+      <section class="metrics" id="metrics"></section>
+      <nav id="tabs">
+        <button data-tab="library" class="active">图库</button
+        ><button data-tab="imports">导入与预处理</button
+        ><button data-tab="settings">设置</button>
+      </nav>
+      <section id="library" class="pane">
+        <div class="toolbar">
+          <div class="segmented">
+            <button data-purpose="meme">表情素材</button
+            ><button data-purpose="image" class="active">普通图片</button
+            ><button id="archive">归档</button>
+          </div>
+          <form id="searchForm">
+            <input
+              id="query"
+              placeholder="描述你想找的内容或语气"
+              aria-label="语义搜索"
+            /><button>语义检索</button
+            ><button type="button" id="resetSearch" class="quiet">清除</button>
+          </form>
+        </div>
+        <p id="libraryInfo" class="sub"></p>
+        <div id="grid" class="grid"></div>
+        <div class="pagination">
+          <button id="previous" class="quiet">上一页</button
+          ><span id="pageInfo"></span
+          ><button id="next" class="quiet">下一页</button>
+        </div>
+      </section>
+      <section id="imports" class="pane" hidden>
+        <div class="columns">
+          <article class="panel">
+            <h2>添加图片</h2>
+            <p>原图先保存，你准备好后再启动预处理。</p>
+            <label class="file"
+              >选择单张或多张图片<input
+                id="files"
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp"
+                multiple /></label
+            ><label class="file"
+              >导入 ZIP 图包或图库备份<input id="zip" type="file" accept=".zip"
+            /></label>
+            <form id="folderForm">
+              <label
+                >本机目录<input
+                  id="folder"
+                  placeholder="选择要导入的文件夹路径"
+                  required /></label
+              ><label
+                ><input id="astr" type="checkbox" />这是 Astr
+                图库（继承描述与分类）</label
+              ><button>导入目录</button>
+            </form>
+          </article>
+          <article class="panel">
+            <h2>GitHub 图包</h2>
+            <p>按指定版本导入。再次导入会保留你和她在本地做过的修改。</p>
+            <form id="githubForm">
+              <label
+                >仓库地址<input
+                  id="repository"
+                  placeholder="https://github.com/作者/仓库"
+                  required
+              /></label>
+              <div class="row">
+                <label
+                  >分支、标签或提交<input
+                    id="ref"
+                    placeholder="默认分支" /></label
+                ><label
+                  >包所在子目录<input id="subpath" placeholder="仓库根目录"
+                /></label>
+              </div>
+              <button>导入图包</button>
+            </form>
+          </article>
+        </div>
+        <article class="panel">
+          <h2>预处理与任务</h2>
+          <p>补齐缺失描述与向量后，她就能检索使用。收藏单张图片会自动处理。</p>
+          <div class="row">
+            <button id="prepare">处理缺失的描述与向量</button
+            ><button id="recaption" class="quiet">重新识别全部未归档图片</button
+            ><a class="button quiet" href="/plugins/gallery/backup"
+              >导出图库备份</a
+            >
+          </div>
+          <p class="sub">
+            备份包含原图、描述、标签、归档记录和向量；恢复时新增内容会合并，已有本地编辑优先。
+          </p>
+          <div id="jobs"></div>
+        </article>
+      </section>
+      <section id="settings" class="pane" hidden>
+        <form id="settingsForm" class="panel narrow">
+          <h2>模型与选图</h2>
+          <label>图片理解模型<select id="visionModelId"></select></label>
+          <p class="sub">只在需要理解图片时调用。GIF 使用多帧采样。</p>
+          <label>向量模型<select id="embeddingModelId"></select></label>
+          <p class="sub">
+            图片向量长期复用；每次语义查询仅转换查询文字。切换模型后请手动重建向量。
+          </p>
+          <label
+            >每次检索候选数<input
+              id="topK"
+              type="number"
+              min="1"
+              max="20"
+              value="5" /></label
+          ><label class="toggle"
+            ><input
+              id="allowOriginals"
+              type="checkbox"
+            />允许主模型按需查看候选原图</label
+          >
+          <p class="sub">
+            默认关闭，只返回描述和标签。当前宿主尚缺多模态工具结果接口，开启后也暂不能把原图交给主模型；不影响入库图片理解。
+          </p>
+          <button>保存设置</button>
+          <p id="configError" class="error"></p>
+        </form>
+      </section>
+    </main>
+    <dialog id="detail">
+      <button id="closeDetail" class="close quiet" aria-label="关闭">×</button>
+      <div class="detail-body">
+        <img id="detailImage" alt="图片预览" />
+        <form id="editForm">
+          <h2>图片详情</h2>
+          <label
+            >描述<textarea
+              id="description"
+              rows="5"
+              maxlength="2000"
+            ></textarea></label
+          ><label>标签（用逗号分隔）<input id="tags" /></label>
+          <div class="row">
+            <label><input id="isMeme" type="checkbox" />表情素材</label
+            ><label><input id="isImage" type="checkbox" />普通图片</label>
+          </div>
+          <p id="assetState" class="sub"></p>
+          <p id="sourceInfo" class="sub"></p>
+          <p id="detailError" role="status" class="error"></p>
+          <div class="row">
+            <button>保存修改</button
+            ><button type="button" id="prepareAsset" class="quiet">
+              预处理这张图片</button
+            ><button type="button" id="archiveAsset" class="quiet"></button>
+          </div>
+        </form>
+      </div>
+    </dialog>
+    <script type="module" src="/plugins/gallery/app.js"></script>
+  </body>
+</html>
