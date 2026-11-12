@@ -80,7 +80,7 @@ writeFileSync(
   join(out, "BUILD.json"),
   JSON.stringify(
     {
-      version: "0.1.1",
+      version: "0.1.2",
       node: process.version,
       platform: process.platform,
       arch: process.arch,

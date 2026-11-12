@@ -18,6 +18,10 @@
 
 主模型工具会自动跟随调用它的会话工具上下文。`gallery_collect` 的 mediaRef 必须匹配工具会话 ID；入库原图先持久保存，结果为 `state:saved` 与任务 ID，向量完成另查 `gallery_job`。图库不调用 sessions.current，不创建新会话，不让全局共享图片扩大聊天记忆范围。
 
+`gallery_job` 的 `state`、`failed` 保留当次任务的历史结果；新增 `unresolvedFailed` 统计尚未恢复的失败图片，`resolvedFailed` 统计已恢复项。错误项包含 `assetId`、当前 `description`、`indexState` 与 `resolved`；另一个任务完成后，旧任务仍可为 `errors`，但对应图片会显示已恢复。若图片再次编辑导致索引失效，不再标为已恢复。模型工具不返回本地源文件路径。
+
+普通预处理补齐缺失描述时，保留 `edited` 中标记的标签和用途（包括有意清空的标签）；显式重新识别允许覆盖。原有修订冲突检查继续拒绝在途旧结果。
+
 `gallery_manage` 读取结果含 revision，修改/归档/恢复必须携带该 revision；冲突要求重新读取。模型可修改人工编辑字段。来源导入更新受 edited 字段保护，包括模型整理和用户主动重新识别产生的本地修改。来源记录更新不代表允许覆盖本地整理。
 
 ## 主干待兼容新增：多模态工具结果

@@ -43,11 +43,17 @@ for (const baseline of ["current", "213b52b"])
       );
     }
     const modelCalls: any[] = [];
+    let failEmbedding = false;
     const server = createServer(async (req, res) => {
       let raw = "";
       for await (const b of req) raw += b;
       const body = JSON.parse(raw);
       modelCalls.push(body);
+      if (failEmbedding && req.url?.endsWith("/embeddings")) {
+        res.writeHead(503, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "synthetic unavailable" }));
+        return;
+      }
       res.setHeader("Content-Type", "application/json");
       res.end(
         JSON.stringify(
@@ -215,6 +221,61 @@ for (const baseline of ["current", "213b52b"])
       "image/png",
     );
     assert.equal((await request("action", { action: "read", id })).status, 200);
+    // Exercise the other entry point too: upload remains manual, then a
+    // preparation failure recovers in a new job without falsifying old history.
+    const beforeUpload = modelCalls.length;
+    const upload = await fetch(
+      url + "/plugins/gallery/upload?name=synthetic.png",
+      {
+        method: "POST",
+        headers: { Cookie: cookie },
+        body: await png("#223344"),
+      },
+    );
+    assert.equal(upload.status, 200);
+    const uploaded = ((await upload.json()) as any).asset;
+    assert.equal(uploaded.indexState, "pending");
+    assert.equal(modelCalls.length, beforeUpload);
+    const waitJob = async (jobId: string, expected: string) => {
+      for (let n = 0; n < 80; n++) {
+        const snapshot = (await (await request("state")).json()) as any;
+        const job = snapshot.jobs.find((j: any) => j.id === jobId);
+        if (job?.state === expected) return job;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      assert.fail("Job did not reach " + expected);
+    };
+    failEmbedding = true;
+    const failedJob = (await (
+      await request("action", { action: "prepare", ids: [uploaded.id] })
+    ).json()) as any;
+    await waitJob(failedJob.id, "errors");
+    let historical = await app.tools.call(
+      "gallery_job",
+      { id: failedJob.id },
+      { permission: "full" },
+    );
+    assert.equal(historical.result.unresolvedFailed, 1);
+    assert.equal(historical.result.errors[0].assetId, uploaded.id);
+    assert.match(historical.result.errors[0].error, /向量生成失败.*503/);
+    failEmbedding = false;
+    const recovered = (await (
+      await request("action", { action: "prepare", ids: [uploaded.id] })
+    ).json()) as any;
+    await waitJob(recovered.id, "completed");
+    historical = await app.tools.call(
+      "gallery_job",
+      { id: failedJob.id },
+      { permission: "full" },
+    );
+    assert.equal(historical.result.state, "errors");
+    assert.equal(historical.result.failed, 1);
+    assert.equal(historical.result.unresolvedFailed, 0);
+    assert.equal(historical.result.resolvedFailed, 1);
+    assert.equal(historical.result.errors[0].resolved, true);
+    assert.equal(historical.result.errors[0].indexState, "ready");
+    assert.equal(historical.result.errors[0].description, "猫在打招呼");
+    assert.ok(!JSON.stringify(historical).includes(run));
     await app.runtime.action("gallery", "stop");
     assert.equal((await request("settings")).status, 404);
     assert.ok(
@@ -226,7 +287,7 @@ for (const baseline of ["current", "213b52b"])
     ).length;
     await app.runtime.action("gallery", "start");
     state = await (await request("state?purpose=meme")).json();
-    assert.equal(state.items[0].id, id);
+    assert.ok(state.items.some((item: any) => item.id === id));
     assert.equal(state.config.embeddingModelId, "embedding");
     assert.equal(
       Object.keys(await app.memory.listSessionMeta()).length,

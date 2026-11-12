@@ -42,7 +42,32 @@ export function publicIP(address: string) {
     !address.toLowerCase().startsWith("::ffff:")
   );
 }
-export async function publicURL(value: string) {
+async function lookupWithSignal(host: string, signal?: AbortSignal) {
+  signal?.throwIfAborted();
+  const pending = lookup(host, { all: true });
+  if (!signal) return pending;
+  // System DNS itself cannot be cancelled. Stop waiting promptly and consume
+  // either late outcome without allowing it to dispatch an HTTP request.
+  return new Promise<LookupAddress[]>((resolve, reject) => {
+    const abort = () => {
+      signal.removeEventListener("abort", abort);
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    pending.then(
+      (addresses) => {
+        signal.removeEventListener("abort", abort);
+        resolve(addresses);
+      },
+      (error) => {
+        signal.removeEventListener("abort", abort);
+        reject(error);
+      },
+    );
+    if (signal.aborted) abort();
+  });
+}
+export async function publicURL(value: string, signal?: AbortSignal) {
   let url: URL;
   try {
     url = new URL(value);
@@ -56,7 +81,8 @@ export async function publicURL(value: string) {
   )
     fail("url", "只支持公开 HTTP(S) 图片地址。");
   const host = url.hostname.replace(/^\[|\]$/g, "");
-  const addresses = await lookup(host, { all: true });
+  const addresses = await lookupWithSignal(host, signal);
+  signal?.throwIfAborted();
   if (!addresses.length || addresses.some((a) => !publicIP(a.address)))
     fail("url", "不能从图片链接读取本机或内网地址。");
   return { url, addresses };
@@ -92,7 +118,7 @@ export async function requestBytes(
     signal.throwIfAborted();
     let dispatcher: Dispatcher;
     if (options.publicOnly) {
-      const verified = await publicURL(target);
+      const verified = await publicURL(target, signal);
       signal.throwIfAborted();
       dispatcher = options.proxy
         ? new ProxyAgent(options.proxy)

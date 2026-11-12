@@ -255,8 +255,8 @@ function renderJobs() {
       row.append(
         node(
           "p",
-          `${error.key}: ${error.error}${error.resolved ? "\n该图片现已建好索引，此处保留历史失败记录。" : ""}`,
-          "error-list",
+          `${error.description || error.key}: ${error.error}${error.resolved ? "\n已恢复：该图片现已建好索引，无需重试。此处仅保留历史记录。" : ""}`,
+          error.resolved ? "error-list resolved" : "error-list",
         ),
       );
       wrap.append(row);

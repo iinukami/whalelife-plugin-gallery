@@ -318,6 +318,9 @@ dialog::backdrop {
   overflow-wrap: anywhere;
   white-space: pre-line;
 }
+.error-list.resolved {
+  color: inherit;
+}
 .job-error {
   display: flex;
   align-items: center;

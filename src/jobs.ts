@@ -16,6 +16,12 @@ export function jobSummary(j: Job, store?: Store) {
         key: x.key,
         error: x.error,
         ...(x.assetId ? { assetId: x.assetId } : {}),
+        ...(asset
+          ? {
+              description: asset.description.slice(0, 120),
+              indexState: asset.indexState,
+            }
+          : {}),
         resolved: !!asset && asset.indexState === "ready",
       };
     });
@@ -27,6 +33,7 @@ export function jobSummary(j: Job, store?: Store) {
     done: j.items.filter((x) => x.status === "done").length,
     failed: j.items.filter((x) => x.status === "failed").length,
     resolvedFailed: failures.filter((x) => x.resolved).length,
+    unresolvedFailed: failures.filter((x) => !x.resolved).length,
     errors: failures.slice(0, 30),
     createdAt: j.createdAt,
   };
@@ -79,7 +86,8 @@ export class Jobs {
           item.status = "pending";
           delete item.error;
         }
-    if (!j.items.some((x) => x.status === "pending")) return jobSummary(j);
+    if (!j.items.some((x) => x.status === "pending"))
+      return jobSummary(j, this.store);
     j.state = "running";
     this.store.saveJob(j);
     this.pending.add(id);
@@ -87,7 +95,7 @@ export class Jobs {
       this.running = this.drain().finally(() => {
         this.running = undefined;
       });
-    return jobSummary(j);
+    return jobSummary(j, this.store);
   }
   pause(id: string) {
     const j = this.store.job(id);
@@ -97,7 +105,7 @@ export class Jobs {
     }
     this.pending.delete(id);
     if (this.current === id) this.controller?.abort();
-    return jobSummary(j);
+    return jobSummary(j, this.store);
   }
   private async drain() {
     while (this.pending.size && !this.signal.aborted) {

@@ -457,15 +457,21 @@ export async function apply(ctx: Context) {
   );
   register(
     "gallery_job",
-    "查询收藏任务的真实进度；完成前不能声称向量已准备好。",
+    "查询收藏任务的真实进度。state/failed 保留当次任务结果；resolvedFailed、unresolvedFailed 和每张图片的 resolved/indexState 表示当前是否恢复，不能把已恢复的历史失败说成仍卡住。未就绪前不能声称向量已准备好。",
     { id: { type: "string" } },
     ["id"],
     safe((x) => {
-      const result = jobSummary(store!.job(text(x.id, 80, false)));
+      const result = jobSummary(store!.job(text(x.id, 80, false)), store!);
       return {
         ok: true,
         ...result,
-        errors: result.errors.map((e) => ({ error: e.error })),
+        errors: result.errors.map((e) => ({
+          error: e.error,
+          assetId: e.assetId,
+          description: e.description,
+          resolved: e.resolved,
+          indexState: e.indexState,
+        })),
       };
     }),
   );
@@ -479,7 +485,7 @@ export async function apply(ctx: Context) {
   ctx.provide("gallery", {
     apiVersion: "1.0.0",
     status: () => ({
-      version: "0.1.1",
+      version: "0.1.2",
       ...store!.stats(),
       originalsAllowed: config.allowOriginals,
       candidateImages: false,

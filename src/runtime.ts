@@ -216,7 +216,13 @@ export class Gallery {
             signal,
           );
           signal.throwIfAborted();
-          a = this.store.edit(a.id, revision, description, "prepare");
+          // Filling a missing description is not permission to reclassify
+          // fields already curated by the user or the main model.
+          const patch = { ...description };
+          if (!job.options.forceCaption)
+            for (const key of ["tags", "purposes"] as const)
+              if (a.edited.includes(key)) delete patch[key];
+          a = this.store.edit(a.id, revision, patch, "prepare");
         }
         stage = "向量生成";
         const old = this.store.vector(a.id);
