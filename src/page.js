@@ -147,7 +147,7 @@ function renderCards(items) {
       selection.toggle(a.id, check.checked);
       updateSelection();
     };
-    label.append(check, node("span", "选择"));
+    label.append(check);
     const card = node("button", undefined, "card");
     card.type = "button";
     const img = node("img");
@@ -164,7 +164,8 @@ function renderCards(items) {
             : "等待预处理"),
       ),
     );
-    caption.append(
+    const badges = node("div", undefined, "asset-badges");
+    badges.append(
       node(
         "span",
         a.archived
@@ -178,10 +179,11 @@ function renderCards(items) {
       ),
     );
     if (a.frames > 1 || a.animated)
-      caption.append(node("span", "动图", "badge"));
+      badges.append(node("span", "动图", "badge"));
+    caption.append(badges);
     card.append(img, caption);
     card.onclick = task(() => openDetail(a.id));
-    wrapper.append(label, card);
+    wrapper.append(card, label);
     $("grid").append(wrapper);
   }
   if (!items.length) {
