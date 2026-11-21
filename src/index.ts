@@ -111,6 +111,7 @@ export async function apply(ctx: Context) {
   for (const [path, file, type] of [
     ["settings", "page.html", "text/html"],
     ["app.js", "page.js", "text/javascript"],
+    ["selection.js", "selection.js", "text/javascript"],
     ["style.css", "page.css", "text/css"],
   ])
     ctx.web.page(
@@ -278,6 +279,20 @@ export async function apply(ctx: Context) {
             "user",
           );
           break;
+        case "archiveMany": {
+          signal.throwIfAborted();
+          const batch = store!.archiveMany(x.items, x.archived);
+          result = {
+            ok: true,
+            changed: batch.changed,
+            assets: batch.assets.map(({ id, revision, archived }) => ({
+              id,
+              revision,
+              archived,
+            })),
+          };
+          break;
+        }
         case "prepare": {
           const ids = x.ids === undefined ? store!.ids() : x.ids;
           if (!Array.isArray(ids) || ids.some((i) => typeof i !== "string"))
@@ -485,7 +500,7 @@ export async function apply(ctx: Context) {
   ctx.provide("gallery", {
     apiVersion: "1.0.0",
     status: () => ({
-      version: "0.1.2",
+      version: "0.1.3",
       ...store!.stats(),
       originalsAllowed: config.allowOriginals,
       candidateImages: false,

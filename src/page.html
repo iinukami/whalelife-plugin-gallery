@@ -45,6 +45,19 @@ Copyright (c) 2026 iinukami and contributors.
           </form>
         </div>
         <p id="libraryInfo" class="sub"></p>
+        <div class="bulk-toolbar" aria-label="批量整理图片">
+          <label class="select-all"
+            ><input id="selectAll" type="checkbox" />全选当前页</label
+          >
+          <span id="selectionCount" role="status" aria-live="polite"
+            >已选 0 张</span
+          >
+          <button id="clearSelection" type="button" class="quiet" disabled>
+            取消选择
+          </button>
+          <button id="batchArchive" type="button" disabled>归档所选</button>
+          <span class="sub">仅操作当前页勾选的图片；归档后可恢复。</span>
+        </div>
         <div id="grid" class="grid"></div>
         <div class="pagination">
           <button id="previous" class="quiet">上一页</button

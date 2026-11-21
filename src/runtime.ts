@@ -324,6 +324,7 @@ export class Gallery {
       purpose,
       candidates: rows.map((r) => ({
         ...candidate(r.asset),
+        revision: r.asset.revision,
         score: Number(r.score.toFixed(5)),
       })),
       originalsAllowed: this.config().allowOriginals,

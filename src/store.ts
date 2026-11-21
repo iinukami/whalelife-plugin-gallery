@@ -17,6 +17,7 @@ import { join } from "node:path";
 import { setImmediate } from "node:timers/promises";
 import {
   fail,
+  object,
   purposes,
   tags,
   text,
@@ -229,6 +230,50 @@ export class Store {
       }
       this.save(a);
       return a;
+    });
+  }
+  archiveMany(input: unknown, archived: unknown) {
+    if (typeof archived !== "boolean") fail("invalid", "归档状态无效。");
+    if (!Array.isArray(input) || !input.length || input.length > 200)
+      fail("invalid", "请选择 1–200 张图片。");
+    const seen = new Set<string>();
+    const items = input.map((value) => {
+      const item = object(value),
+        id = text(item.id, 64, false);
+      if (
+        !/^[a-f0-9]{64}$/.test(id) ||
+        !Number.isSafeInteger(item.revision) ||
+        item.revision < 1
+      )
+        fail("invalid", "图片 ID 或版本无效，请刷新后重新选择。");
+      if (seen.has(id)) fail("invalid", "所选图片不能重复。");
+      seen.add(id);
+      return { id, revision: item.revision as number };
+    });
+    return this.transaction(() => {
+      // Validate the entire snapshot before changing any row. A later storage
+      // failure also rolls back all metadata and history in this transaction.
+      const assets = items.map(({ id, revision }) => {
+        const asset = this.get(id);
+        if (asset.revision !== revision)
+          fail("conflict", "所选图片已变化，本批未修改。请刷新后重新选择。");
+        return asset;
+      });
+      let changed = 0;
+      for (const asset of assets) {
+        if (asset.archived === archived) continue;
+        this.db
+          .prepare("INSERT INTO history(assetId,json) VALUES(?,?)")
+          .run(asset.id, JSON.stringify(asset));
+        asset.archived = archived;
+        asset.revision++;
+        asset.updatedAt = new Date().toISOString();
+        if (!asset.edited.includes("archived")) asset.edited.push("archived");
+        // Archive changes visibility only; keep vectors and processing errors.
+        this.save(asset);
+        changed++;
+      }
+      return { changed, assets };
     });
   }
   markFailed(id: string, message: string, expectedRevision?: number) {

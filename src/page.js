@@ -2,6 +2,8 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  * Additional terms under AGPLv3 Section 7: see LICENSE-ADDITIONAL.
  */
+import { PageSelection } from "./selection.js";
+const selection = new PageSelection();
 const $ = (id) => document.getElementById(id),
   base = "/plugins/gallery";
 let state,
@@ -15,7 +17,9 @@ let state,
   refreshVersion = 0,
   lastGridKey = "",
   lastSettingsKey = "",
-  historyOpen = false;
+  historyOpen = false,
+  viewVersion = 0,
+  bulkBusy = false;
 const node = (tag, text, cls) => {
   const n = document.createElement(tag);
   if (text !== undefined) n.textContent = text;
@@ -61,6 +65,7 @@ function task(fn) {
       notice(e.message, true);
     } finally {
       if (button) button.disabled = false;
+      updateSelection();
     }
   };
 }
@@ -84,13 +89,67 @@ function renderSettings() {
   $("allowOriginals").checked = state.config.allowOriginals;
   $("configError").textContent = state.configError;
 }
+function updateSelection() {
+  const count = selection.selected.size,
+    total = selection.items.size;
+  $("selectAll").checked = total > 0 && count === total;
+  $("selectAll").indeterminate = count > 0 && count < total;
+  $("selectAll").disabled = bulkBusy || !total;
+  $("selectionCount").textContent = "已选 " + count + " 张";
+  $("clearSelection").disabled = bulkBusy || !count;
+  $("batchArchive").textContent = bulkBusy
+    ? "正在处理…"
+    : archived
+      ? "恢复所选"
+      : "归档所选";
+  $("batchArchive").disabled = bulkBusy || !count;
+  for (const input of $("grid").querySelectorAll("input[data-asset-id]")) {
+    input.checked = selection.selected.has(input.dataset.assetId);
+    input.disabled = bulkBusy || !selection.items.has(input.dataset.assetId);
+    input.closest(".asset-card").classList.toggle("selected", input.checked);
+  }
+  for (const control of document.querySelectorAll(
+    "[data-purpose], #archive, #searchForm button, #query",
+  ))
+    control.disabled = bulkBusy;
+  $("previous").disabled = bulkBusy || searching || offset === 0;
+  $("next").disabled =
+    bulkBusy || searching || offset + 60 >= (state?.total ?? 0);
+}
+function changeView() {
+  viewVersion++;
+  refreshVersion++;
+  selection.clear();
+  selection.setItems([]);
+  updateSelection();
+}
 function renderCards(items) {
+  if (selection.setItems(items))
+    notice("部分所选图片已变化或离开当前页，已取消勾选，请核对后操作。");
   const key = JSON.stringify([purpose, archived, searching, items]);
-  if (key === lastGridKey) return;
+  if (key === lastGridKey) {
+    updateSelection();
+    return;
+  }
   lastGridKey = key;
   $("grid").replaceChildren();
   for (const a of items) {
+    const wrapper = node("article", undefined, "asset-card");
+    const label = node("label", undefined, "asset-check");
+    const check = node("input");
+    check.type = "checkbox";
+    check.dataset.assetId = a.id;
+    check.setAttribute(
+      "aria-label",
+      "选择图片：" + (a.description || a.id.slice(0, 8)),
+    );
+    check.onchange = () => {
+      selection.toggle(a.id, check.checked);
+      updateSelection();
+    };
+    label.append(check, node("span", "选择"));
     const card = node("button", undefined, "card");
+    card.type = "button";
     const img = node("img");
     img.src = base + "/image?id=" + encodeURIComponent(a.id) + "&preview=1";
     img.alt = a.description || "未描述图片";
@@ -122,7 +181,8 @@ function renderCards(items) {
       caption.append(node("span", "动图", "badge"));
     card.append(img, caption);
     card.onclick = task(() => openDetail(a.id));
-    $("grid").append(card);
+    wrapper.append(label, card);
+    $("grid").append(wrapper);
   }
   if (!items.length) {
     const empty = node("div", undefined, "empty");
@@ -138,6 +198,7 @@ function renderCards(items) {
     );
     $("grid").append(empty);
   }
+  updateSelection();
 }
 async function openDetail(id) {
   $("detailError").textContent = "";
@@ -271,11 +332,16 @@ function renderJobs() {
   if (!state.jobs.length) box.append(node("p", "还没有处理任务。", "sub"));
 }
 async function refresh() {
-  const version = ++refreshVersion;
+  const version = ++refreshVersion,
+    view = viewVersion;
   const next = await api(
     "/state?purpose=" + purpose + "&archived=" + archived + "&offset=" + offset,
   );
-  if (version !== refreshVersion) return;
+  if (version !== refreshVersion || view !== viewVersion) return;
+  if (!searching && offset > 0 && offset >= next.total) {
+    offset = Math.floor(Math.max(0, next.total - 1) / 60) * 60;
+    return refresh();
+  }
   state = next;
   $("metrics").replaceChildren();
   for (const [label, value] of [
@@ -299,8 +365,7 @@ async function refresh() {
     : "先按用途过滤，再做语义检索。同一张图可以属于两种用途。";
   $("pageInfo").textContent =
     `共 ${state.total} 张 · 第 ${Math.floor(offset / 60) + 1} 页`;
-  $("previous").disabled = offset === 0;
-  $("next").disabled = offset + 60 >= state.total;
+  updateSelection();
 }
 for (const button of document.querySelectorAll("[data-tab]"))
   button.onclick = () => {
@@ -311,6 +376,8 @@ for (const button of document.querySelectorAll("[data-tab]"))
   };
 for (const button of document.querySelectorAll("[data-purpose]"))
   button.onclick = task(async () => {
+    if (bulkBusy) return;
+    changeView();
     purpose = button.dataset.purpose;
     offset = 0;
     searching = false;
@@ -319,6 +386,8 @@ for (const button of document.querySelectorAll("[data-purpose]"))
     await refresh();
   });
 $("archive").onclick = task(async () => {
+  if (bulkBusy) return;
+  changeView();
   archived = !archived;
   offset = 0;
   searching = false;
@@ -327,15 +396,61 @@ $("archive").onclick = task(async () => {
 });
 $("refresh").onclick = task(refresh);
 $("previous").onclick = task(async () => {
+  if (bulkBusy) return;
+  changeView();
   offset = Math.max(0, offset - 60);
   searching = false;
   await refresh();
 });
 $("next").onclick = task(async () => {
+  if (bulkBusy) return;
+  changeView();
   offset += 60;
   searching = false;
   await refresh();
 });
+$("selectAll").onchange = () => {
+  selection.selectAll($("selectAll").checked);
+  updateSelection();
+};
+$("clearSelection").onclick = () => {
+  selection.clear();
+  updateSelection();
+};
+$("batchArchive").onclick = async () => {
+  if (bulkBusy || !selection.selected.size) return;
+  const items = selection.entries(),
+    target = !archived;
+  const verb = target ? "归档" : "恢复";
+  bulkBusy = true;
+  viewVersion++;
+  refreshVersion++;
+  updateSelection();
+  let changed;
+  try {
+    const result = await api("/action", {
+      action: "archiveMany",
+      items,
+      archived: target,
+    });
+    changed = result.changed;
+    changeView();
+    searching = false;
+    await refresh();
+    notice("已" + verb + " " + changed + " 张图片。");
+  } catch (e) {
+    await refresh().catch(() => {});
+    notice(
+      (changed === undefined
+        ? ""
+        : "已" + verb + " " + changed + " 张，但刷新失败：") + e.message,
+      true,
+    );
+  } finally {
+    bulkBusy = false;
+    updateSelection();
+  }
+};
 $("settingsForm").oninput = () => (settingsDirty = true);
 $("settingsForm").onsubmit = task(async () => {
   await api("/action", {
@@ -413,17 +528,23 @@ $("recaption").onclick = task(async () => {
   notice("重新识别任务已启动。");
 });
 $("searchForm").onsubmit = task(async () => {
+  if (bulkBusy) return;
   if (archived) throw Error("归档图片不参与语义检索，请先退出归档。");
+  changeView();
+  const view = viewVersion;
   const r = await api("/action", {
     action: "search",
     query: $("query").value,
     purpose,
   });
+  if (view !== viewVersion || bulkBusy) return;
   searching = true;
   renderCards(r.candidates);
   notice(`找到 ${r.candidates.length} 个候选。`);
 });
 $("resetSearch").onclick = task(async () => {
+  if (bulkBusy) return;
+  changeView();
   searching = false;
   $("query").value = "";
   await refresh();

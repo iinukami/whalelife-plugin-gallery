@@ -276,6 +276,47 @@ for (const baseline of ["current", "213b52b"])
     assert.equal(historical.result.errors[0].indexState, "ready");
     assert.equal(historical.result.errors[0].description, "猫在打招呼");
     assert.ok(!JSON.stringify(historical).includes(run));
+    const currentAssets = (
+      (await (await request("state?purpose=meme")).json()) as any
+    ).items;
+    const batchItems = currentAssets.map(({ id, revision }: any) => ({
+      id,
+      revision,
+    }));
+    const requestsBeforeArchive = modelCalls.length;
+    const batch = await request("action", {
+      action: "archiveMany",
+      items: batchItems,
+      archived: true,
+    });
+    assert.equal(batch.status, 200);
+    const archivedBatch = (await batch.json()) as any;
+    assert.equal(archivedBatch.changed, batchItems.length);
+    assert.equal(
+      ((await (await request("state?purpose=meme")).json()) as any).total,
+      0,
+    );
+    assert.equal(
+      (
+        await request("action", {
+          action: "archiveMany",
+          items: batchItems,
+          archived: false,
+        })
+      ).status,
+      409,
+    );
+    const restoredBatch = await request("action", {
+      action: "archiveMany",
+      items: archivedBatch.assets,
+      archived: false,
+    });
+    assert.equal(restoredBatch.status, 200);
+    assert.equal(modelCalls.length, requestsBeforeArchive);
+    assert.match(
+      await (await request("selection.js")).text(),
+      /class PageSelection/,
+    );
     await app.runtime.action("gallery", "stop");
     assert.equal((await request("settings")).status, 404);
     assert.ok(
