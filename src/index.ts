@@ -500,7 +500,7 @@ export async function apply(ctx: Context) {
   ctx.provide("gallery", {
     apiVersion: "1.0.0",
     status: () => ({
-      version: "0.1.3",
+      version: "0.1.4",
       ...store!.stats(),
       originalsAllowed: config.allowOriginals,
       candidateImages: false,

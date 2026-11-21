@@ -1,5 +1,5 @@
 id: gallery
 name: 图库
-version: 0.1.3
+version: 0.1.4
 description: 共享本地图库、表情与普通图片管理、语义检索和可恢复导入预处理
 apiVersion: "1.0.0"
